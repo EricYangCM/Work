@@ -1,7 +1,7 @@
 
 
 *** using static AlpImport;
-
+*** 폴더에 alp4395.dll 이 있어야 함
 
 
 public class ALP_43
