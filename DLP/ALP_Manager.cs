@@ -7,107 +7,131 @@
 
 
 
-public class DLP_Manager : IDisposable
-    {
-        private ALP_43 _ALP;
-        private bool _isInitialized = false;
-        private int _maxRetry = 5;
-        private int _retryDelay_ms = 500;
+ public class DLP_Manager : IDisposable
+ {
+     private ALP_43 _ALP;
+     private bool _isInitialized = false;
+     private int _maxRetry = 5;
+     private int _retryDelay_ms = 500;
 
-        public DLP_Manager()
-        {
-            _ALP = new ALP_43();
+     public DLP_Manager()
+     {
+         _ALP = new ALP_43();
 
-            // ALP 이벤트 내부 처리
-            _ALP.ProjectionDone += () =>
-            {
-                Debug.WriteLine("[DLP_Manager] 시퀀스 투사 완료");
-            };
+         // ALP 이벤트 내부 처리
+         _ALP.ProjectionDone += (seqID) =>
+         {
+             ProjectionDone?.Invoke(seqID);
+             //Debug.WriteLine("[DLP_Manager] 시퀀스 투사 완료");
+         };
 
-            _ALP.SetImageDone += (seqID) =>
-            {
-                Debug.WriteLine($"[DLP_Manager] 시퀀스 {seqID} 이미지 업로드 완료");
-            };
+         _ALP.SetImageDone += (seqID) =>
+         {
+             //Debug.WriteLine($"[DLP_Manager] 시퀀스 {seqID} 이미지 업로드 완료");
 
-            TryAutoInit();
-        }
+             SetImageDone?.Invoke(seqID);
+         };
 
-        ~DLP_Manager()
-        {
-            DeInit();  // Finalizer에서도 호출
-        }
+         TryAutoInit();
+     }
 
-        public void Dispose()
-        {
-            DeInit();
-            GC.SuppressFinalize(this);
-        }
+     ~DLP_Manager()
+     {
+         DeInit();  // Finalizer에서도 호출
+     }
 
-        private void TryAutoInit()
-        {
-            for (int i = 0; i < _maxRetry; i++)
-            {
-                if (_ALP.Init())
-                {
-                    _isInitialized = true;
-                    Debug.WriteLine("[DLP_Manager] ALP Init 성공");
-                    return;
-                }
+     public void Dispose()
+     {
+         DeInit();
+         GC.SuppressFinalize(this);
+     }
 
-                Debug.WriteLine($"[DLP_Manager] ALP Init 실패. 재시도 {i + 1}/{_maxRetry}...");
-                Thread.Sleep(_retryDelay_ms);
-            }
+     private void TryAutoInit()
+     {
+         for (int i = 0; i < _maxRetry; i++)
+         {
+             if (_ALP.Init())
+             {
+                 _isInitialized = true;
+                 Debug.WriteLine("[DLP_Manager] ALP Init 성공");
+                 return;
+             }
 
-            Debug.WriteLine("[DLP_Manager] ALP Init 최종 실패");
-        }
+             Debug.WriteLine($"[DLP_Manager] ALP Init 실패. 재시도 {i + 1}/{_maxRetry}...");
+             Thread.Sleep(_retryDelay_ms);
+         }
 
-        private void DeInit()
-        {
-            if (_isInitialized)
-            {
-                _ALP.DeInit();
-                _isInitialized = false;
-                Debug.WriteLine("[DLP_Manager] ALP DeInit 완료");
-            }
-        }
+         Debug.WriteLine("[DLP_Manager] ALP Init 최종 실패");
+     }
 
-        public bool IsInitialized => _isInitialized;
+     private void DeInit()
+     {
+         if (_isInitialized)
+         {
+             _ALP.DeInit();
+             _isInitialized = false;
+             Debug.WriteLine("[DLP_Manager] ALP DeInit 완료");
+         }
+     }
+
+     public bool IsInitialized => _isInitialized;
 
 
-        /// <summary>
-        /// 이미지 파일을 시퀀스로 업로드함
-        /// </summary>
-        public void SetImages(string[] imagePaths, uint SequenceID, int exposure_us = 5000)
-        {
-            List<SequenceImageData> _SeqDataList = new List<SequenceImageData>();
 
-            SequenceImageData tempSeq = new SequenceImageData(SequenceID, imagePaths, exposure_us);
-            _SeqDataList.Add(tempSeq);
+     public event Action<uint> SetImageDone;  // 시퀀스 ID를 전달하는 외부 이벤트
+     public event Action<uint> ProjectionDone;
 
-            _ALP.Set_SequenceData(tempSeq);
-        }
 
-        /// <summary>
-        /// 단일 투사 시작
-        /// </summary>
-        public void StartProjection(uint SequenceID)
-        {
-            _ALP.Start_Projection(SequenceID);
-        }
 
-        /// <summary>
-        /// 연속 투사 시작
-        /// </summary>
-        public void StartProjectionContinuous(uint SequenceID)
-        {
-            _ALP.Start_Projection_Cont(SequenceID);
-        }
 
-        /// <summary>
-        /// 연속 투사 중지
-        /// </summary>
-        public void StopProjection()
-        {
-            _ALP.Halt();
-        }
-    }
+
+     /// <summary>
+     /// 폴더 내 모든 이미지 파일을 시퀀스로 업로드함
+     /// </summary>
+     public void SetImagesFromDirectory(string DirectoryPath, uint SequenceID, int exposure_us = 5000)
+     {
+         string[] filePaths = Directory.GetFiles(DirectoryPath)
+                                       .OrderBy(path => Path.GetFileName(path))  // 파일명 기준 정렬
+                                       .ToArray();  // 전체 경로 유지
+
+         SetImages(filePaths, SequenceID, exposure_us);
+     }
+
+
+     /// <summary>
+     /// 이미지 파일을 시퀀스로 업로드함
+     /// </summary>
+     public void SetImages(string[] imagePaths, uint SequenceID, int exposure_us = 5000)
+     {
+         List<SequenceImageData> _SeqDataList = new List<SequenceImageData>();
+
+         SequenceImageData tempSeq = new SequenceImageData(SequenceID, imagePaths, exposure_us);
+         _SeqDataList.Add(tempSeq);
+
+         _ALP.Set_SequenceData(tempSeq);
+     }
+
+     /// <summary>
+     /// 단일 투사 시작
+     /// </summary>
+     public void StartProjection(uint SequenceID)
+     {
+         _ALP.Start_Projection(SequenceID);
+     }
+
+     /// <summary>
+     /// 연속 투사 시작
+     /// </summary>
+     public void StartProjectionContinuous(uint SequenceID)
+     {
+         _ALP.Start_Projection_Cont(SequenceID);
+     }
+
+     /// <summary>
+     /// 연속 투사 중지
+     /// </summary>
+     public void StopProjection()
+     {
+         _ALP.Halt();
+     }
+ }
